@@ -1,0 +1,2 @@
+R	250901122107Z	150904122153Z	01	unknown	/C=ZA/ST=EC/L=Port Elizabeth/O=SouthPort Mansion/OU=PMSIPilot/CN=robert/name=EasyRSA/emailAddress=cyprien.diot@nmmu.ac.za
+V	250901122141Z		02	unknown	/C=ZA/ST=EC/L=Port Elizabeth/O=SouthPort Mansion/OU=PMSIPilot/CN=mandela/name=EasyRSA/emailAddress=cyprien.diot@nmmu.ac.za

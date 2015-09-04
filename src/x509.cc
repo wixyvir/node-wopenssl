@@ -67,6 +67,22 @@ void parse_cert(const FunctionCallbackInfo<Value> &args) {
   args.GetReturnValue().Set(exports);
 }
 
+void verifycrl(const FunctionCallbackInfo<Value> &args) {
+  if (args.Length() < 2) {
+    ThrowException(Exception::Error(String::New("Must provide a certificate file and a crl.")));
+    return NULL;
+  }
+
+  if (!args[0]->IsString() || !args[1]->IsString()) {
+    ThrowException(Exception::TypeError(String::New("Certificate and crl must be strings.")));
+    return NULL;
+  }
+  
+  Local<Object> exports(verify_cert(args[0]->ToString(), args[1]->ToString())->ToObject());
+
+  args.GetReturnValue().Set(exports);
+}
+
 
 #else
 /*
@@ -115,6 +131,29 @@ Handle<Value> parse_cert(const Arguments &args) {
   String::Utf8Value value(args[0]);
   return scope.Close(try_parse(*value));
 }
+
+
+Handle<Value> verifycrl(const Arguments &args) {
+  HandleScope scope;
+
+  if (args.Length() < 2) {
+    ThrowException(Exception::Error(String::New("Must provide a certificate and a crl")));
+    return scope.Close(Undefined());
+  }
+
+  if (!args[0]->IsString() || !args[1]->IsString()) {
+    ThrowException(Exception::TypeError(String::New("Certificate and crl must be a strings.")));
+    return scope.Close(Undefined());
+  }
+
+
+  String::Utf8Value cert(args[0]);
+  String::Utf8Value crl(args[1]);
+  return scope.Close(verify_cert(*cert, *crl));
+}
+
+
+
 #endif // NODE_VERSION_AT_LEAST
 
 
@@ -122,7 +161,6 @@ Handle<Value> parse_cert(const Arguments &args) {
 /*
  * This is where everything is handled for both -0.11.2 and 0.11.3+.
  */
-
 
 Handle<Value> try_parse(char *data) {
   HandleScope scope;
@@ -378,4 +416,89 @@ char* real_name(char *data) {
   }
 
   return data;
+}
+
+
+Handle<Value> verify_cert(char *inputcert, char *inputcrl) {
+  HandleScope		scope;
+  Handle<Object>	exports(Object::New());
+  X509_STORE_CTX	*ctx;
+  X509_STORE		*store;
+  X509			*cert;
+  STACK_OF(X509)	*chain = NULL;
+  X509_CRL		*crl;
+  char			error[128];
+
+  store = X509_STORE_new();
+  ctx = X509_STORE_CTX_new();
+  if (!ctx || !store) {
+    ThrowException(Exception::Error(String::New("Cannot allocate x509 store container")));
+    return scope.Close(Undefined());
+  }
+
+  BIO *bio = BIO_new(BIO_s_mem());
+  int result = BIO_puts(bio, inputcert);
+
+  if (result == -2) {
+    ThrowException(Exception::Error(String::New("BIO doesn't support BIO_puts.")));
+    return scope.Close(exports);
+  }
+  else if (result <= 0) {
+    ThrowException(Exception::Error(String::New("No data was written to BIO.")));
+    return scope.Close(exports);
+  }
+
+  // Try raw read
+  cert = PEM_read_bio_X509(bio, NULL, 0, NULL);
+
+  if (cert == NULL) {
+    // Switch to file BIO
+    bio = BIO_new(BIO_s_file());
+
+    // If raw read fails, try reading the input as a filename.
+    if (!BIO_read_filename(bio, inputcert)) {
+      ThrowException(Exception::Error(String::New("File doesn't exist.")));
+      return scope.Close(exports);
+    }
+
+    // Try reading the bio again with the file in it.
+    cert = PEM_read_bio_X509(bio, NULL, 0, NULL);
+
+    if (cert == NULL) {
+      ThrowException(Exception::Error(String::New("Unable to parse certificate.")));
+      return scope.Close(exports);
+    }
+  }
+  BIO *crlbio = BIO_new(BIO_s_file());
+  BIO_read_filename(crlbio, inputcrl);
+  //  bio = BIO_new(BIO_s_mem());
+  //  BIO_puts(bio, inputcrl);  
+  crl = PEM_read_bio_X509_CRL(crlbio, NULL, NULL, NULL);
+  //  crl = d2i_X509_CRL_bio(bio, NULL);
+  if (!crl) {
+    ThrowException(Exception::Error(String::New("Cannot parse PEM CRL")));
+    return scope.Close(exports);
+  }
+  
+  X509_STORE_add_cert(store, cert);
+  X509_STORE_CTX_init(ctx, store, cert, NULL);
+  // check returns
+  X509_STORE_add_crl(store, crl);
+  X509_VERIFY_PARAM *param = X509_VERIFY_PARAM_new();
+  X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_CRL_CHECK);
+  X509_STORE_CTX_set0_param(ctx, param);
+
+  if (X509_verify_cert(ctx) <= 0) {
+    ERR_error_string_n(ERR_get_error(), error, sizeof(error));
+    ThrowException(Exception::Error(String::New(error)));
+    return scope.Close(exports);
+  }
+  X509_VERIFY_PARAM_free(param);
+  BIO_free(bio);
+  BIO_free(crlbio);
+  X509_free(cert);
+  X509_STORE_CTX_free(ctx);
+  
+
+  return scope.Close(exports);
 }
