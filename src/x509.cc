@@ -485,12 +485,12 @@ Handle<Value> verify_cert(char *inputcert, char *inputcrl) {
   // check returns
   X509_STORE_add_crl(store, crl);
   X509_VERIFY_PARAM *param = X509_VERIFY_PARAM_new();
-  X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_CRL_CHECK);
+  X509_VERIFY_PARAM_clear_flags(param, X509_V_FLAG_CB_ISSUER_CHECK);
+  X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_IGNORE_CRITICAL);
   X509_STORE_CTX_set0_param(ctx, param);
 
   if (X509_verify_cert(ctx) <= 0) {
-    ERR_error_string_n(ERR_get_error(), error, sizeof(error));
-    ThrowException(Exception::Error(String::New(error)));
+    ThrowException(Exception::Error(String::New(X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)))));
     return scope.Close(exports);
   }
   X509_VERIFY_PARAM_free(param);
