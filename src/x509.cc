@@ -474,7 +474,6 @@ Handle<Value> verify_cert(char *inputcert, char *inputcrl) {
   //  bio = BIO_new(BIO_s_mem());
   //  BIO_puts(bio, inputcrl);  
   crl = PEM_read_bio_X509_CRL(crlbio, NULL, NULL, NULL);
-  //  crl = d2i_X509_CRL_bio(bio, NULL);
   if (!crl) {
     ThrowException(Exception::Error(String::New("Cannot parse PEM CRL")));
     return scope.Close(exports);

@@ -73,6 +73,7 @@ Handle<Value> extract_from_p12(char *data, char* password) {
   p12 = d2i_PKCS12_fp(fp, NULL);
   fclose (fp);
   if (!p12) {
+    ERR_print_errors_fp(stderr);
     ThrowException(Exception::TypeError(String::New("Error reading PKCS#12 file\n")));
     return scope.Close(Undefined());
   }
