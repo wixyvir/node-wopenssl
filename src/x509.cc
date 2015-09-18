@@ -67,19 +67,20 @@ void parse_cert(const FunctionCallbackInfo<Value> &args) {
   args.GetReturnValue().Set(exports);
 }
 
-void verifycrl(const FunctionCallbackInfo<Value> &args) {
-  if (args.Length() < 2) {
-    ThrowException(Exception::Error(String::New("Must provide a certificate file and a crl.")));
+void verify(const FunctionCallbackInfo<Value> &args) {
+  if (args.Length() < 1) {
+    ThrowException(Exception::Error(String::New("Must provide a certificate file")));
     return NULL;
   }
 
-  if (!args[0]->IsString() || !args[1]->IsString()) {
-    ThrowException(Exception::TypeError(String::New("Certificate and crl must be strings.")));
+  if (!args[0]->IsString()) {
+    ThrowException(Exception::TypeError(String::New("Certificate must be strings.")));
     return NULL;
   }
   
-  Local<Object> exports(verify_cert(args[0]->ToString(), args[1]->ToString())->ToObject());
 
+  Handle<Object>  array(args[1]->ToObject());
+  Local<Object> exports(verify_cert(args[0]->ToString()));
   args.GetReturnValue().Set(exports);
 }
 
@@ -133,23 +134,23 @@ Handle<Value> parse_cert(const Arguments &args) {
 }
 
 
-Handle<Value> verifycrl(const Arguments &args) {
+Handle<Value> verify(const Arguments &args) {
   HandleScope scope;
 
-  if (args.Length() < 2) {
-    ThrowException(Exception::Error(String::New("Must provide a certificate and a crl")));
+  if (args.Length() < 1) {
+    ThrowException(Exception::Error(String::New("Must provide a certificate")));
     return scope.Close(Undefined());
   }
 
-  if (!args[0]->IsString() || !args[1]->IsString()) {
-    ThrowException(Exception::TypeError(String::New("Certificate and crl must be a strings.")));
+  if (!args[0]->IsString()) {
+    ThrowException(Exception::TypeError(String::New("Certificate must be a strings.")));
     return scope.Close(Undefined());
   }
 
 
   String::Utf8Value cert(args[0]);
-  String::Utf8Value crl(args[1]);
-  return scope.Close(verify_cert(*cert, *crl));
+  Handle<Object> ca(args[1]->ToObject());
+  return scope.Close(verify_cert(*cert, ca));
 }
 
 
@@ -419,14 +420,13 @@ char* real_name(char *data) {
 }
 
 
-Handle<Value> verify_cert(char *inputcert, char *inputcrl) {
+Handle<Value> verify_cert(char *inputcert, const Handle<Object>& calist) {
   HandleScope		scope;
   Handle<Object>	exports(Object::New());
   X509_STORE_CTX	*ctx;
   X509_STORE		*store;
   X509			*cert;
   STACK_OF(X509)	*chain = NULL;
-  X509_CRL		*crl;
   char			error[128];
 
   store = X509_STORE_new();
@@ -469,32 +469,67 @@ Handle<Value> verify_cert(char *inputcert, char *inputcrl) {
       return scope.Close(exports);
     }
   }
-  BIO *crlbio = BIO_new(BIO_s_file());
-  BIO_read_filename(crlbio, inputcrl);
-  //  bio = BIO_new(BIO_s_mem());
-  //  BIO_puts(bio, inputcrl);  
-  crl = PEM_read_bio_X509_CRL(crlbio, NULL, NULL, NULL);
-  if (!crl) {
-    ThrowException(Exception::Error(String::New("Cannot parse PEM CRL")));
-    return scope.Close(exports);
-  }
-  
+  BIO_free(bio);
+
+
+
+
+  if (calist->IsArray())
+    {
+      chain = sk_X509_new_null();
+      Array *carray = Array::Cast(*calist);
+      for (int i = 0; i < carray->Length(); i++)
+	{
+	  String::Utf8Value certstring(carray->Get(i));
+	  bio = BIO_new(BIO_s_mem());
+	  result = BIO_puts(bio, *certstring);
+	  
+	  if (result == -2) {
+	    ThrowException(Exception::Error(String::New("BIO doesn't support BIO_puts.")));
+	    return scope.Close(exports);
+	  }
+	  else if (result <= 0) {
+	    ThrowException(Exception::Error(String::New("No data was written to BIO.")));
+	    return scope.Close(exports);
+	  }
+	  
+	  // Try raw read
+	  cert = PEM_read_bio_X509(bio, NULL, 0, NULL);
+	  
+	  if (cert == NULL) {
+	    // Switch to file BIO
+	    bio = BIO_new(BIO_s_file());
+	    
+	    // If raw read fails, try reading the input as a filename.
+	    if (!BIO_read_filename(bio, *certstring)) {
+	      ThrowException(Exception::Error(String::New("File doesn't exist.")));
+	      return scope.Close(exports);
+	    }
+	    
+	    // Try reading the bio again with the file in it.
+	    cert = PEM_read_bio_X509(bio, NULL, 0, NULL);
+	    
+	    if (cert == NULL) {
+	      ThrowException(Exception::Error(String::New("Unable to parse CA certificate.")));
+	      return scope.Close(exports);
+	    }
+	  }
+	  sk_X509_push(chain, cert);
+	  BIO_free(bio);
+	  
+	}
+    }
+
+
   X509_STORE_add_cert(store, cert);
-  X509_STORE_CTX_init(ctx, store, cert, NULL);
-  // check returns
-  X509_STORE_add_crl(store, crl);
-  X509_VERIFY_PARAM *param = X509_VERIFY_PARAM_new();
-  X509_VERIFY_PARAM_clear_flags(param, X509_V_FLAG_CB_ISSUER_CHECK);
-  X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_IGNORE_CRITICAL);
-  X509_STORE_CTX_set0_param(ctx, param);
+  X509_STORE_CTX_init(ctx, store, cert, chain);
 
   if (X509_verify_cert(ctx) <= 0) {
     ThrowException(Exception::Error(String::New(X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)))));
     return scope.Close(exports);
   }
-  X509_VERIFY_PARAM_free(param);
-  BIO_free(bio);
-  BIO_free(crlbio);
+
+
   X509_free(cert);
   X509_STORE_CTX_free(ctx);
   

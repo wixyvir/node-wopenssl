@@ -6,7 +6,7 @@ exports.getAltNames = x509.getAltNames;
 exports.getSubject = x509.getSubject;
 exports.getIssuer = x509.getIssuer;
 exports.extractP12 = x509.extractP12;
-exports.verifycrl = x509.verifycrl;
+exports.verify = x509.verify;
 
 exports.parseCert = function(path) {
   var ret = x509.parseCert(path);

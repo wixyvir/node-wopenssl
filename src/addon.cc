@@ -14,7 +14,7 @@ void init(Handle<Object> exports) {
   exports->Set(String::NewSymbol("getIssuer"), FunctionTemplate::New(get_issuer)->GetFunction());
   exports->Set(String::NewSymbol("parseCert"), FunctionTemplate::New(parse_cert)->GetFunction());
   exports->Set(String::NewSymbol("extractP12"), FunctionTemplate::New(extract_p12)->GetFunction());
-  exports->Set(String::NewSymbol("verifycrl"), FunctionTemplate::New(verifycrl)->GetFunction());
+  exports->Set(String::NewSymbol("verify"), FunctionTemplate::New(verify)->GetFunction());
 }
 
 NODE_MODULE(wopenssl, init)
