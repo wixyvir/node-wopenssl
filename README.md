@@ -18,7 +18,7 @@ This project aim to implement [OpenSSL](https://www.openssl.org/) commonly used 
 
 This package works for:
 
- - node 0.12.*
+ - node >= 4.4.5
 
 
 From NPM *(recommended)*: `npm install wopenssl`
