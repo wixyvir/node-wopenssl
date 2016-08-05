@@ -1,11 +1,11 @@
 {
   "name": "wopenssl",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Simple SSL certificates parser and validator.",
   "author": "Cyprien DIOT <wixyvir@gmail.com>",
   "keywords": [ "openssl", "x509", "ssl", "p12", "pkcs#12" ],
   "main": "index.js",
-  "engines" : { "node" : ">=0.12" },
+  "engines" : { "node" : ">=4.4" },
   "repository": {
     "type": "git",
     "url": "http://github.com/wixyvir/node-wopenssl"
@@ -13,5 +13,8 @@
   "scripts": {
     "test": "node test/test"
   },
-  "license": "MIT"
+    "license": "MIT",
+    "dependencies": {
+	"nan": "2.2.0"
+    }
 }
